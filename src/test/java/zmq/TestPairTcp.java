@@ -51,4 +51,36 @@ public class TestPairTcp
         ZMQ.term(ctx);
 
     }
+
+    @Test
+    public void testPairTpcSecondClient()
+    {
+        Ctx ctx = ZMQ.init(1);
+        assertThat(ctx, notNullValue());
+        SocketBase sb = ZMQ.socket(ctx, ZMQ.ZMQ_PAIR);
+        assertThat(sb, notNullValue());
+        boolean brc = ZMQ.bind(sb, "tcp://127.0.0.1:6570");
+        assertThat(brc, is(true));
+
+        SocketBase sc = ZMQ.socket(ctx, ZMQ.ZMQ_PAIR);
+        assertThat(sc, notNullValue());
+        brc = ZMQ.connect(sc, "tcp://127.0.0.1:6570");
+        assertThat(brc, is(true));
+
+        Helper.bounce(sb, sc);
+
+        SocketBase sd = ZMQ.socket(ctx, ZMQ.ZMQ_PAIR);
+        assertThat(sd, notNullValue());
+        brc = ZMQ.connect(sd, "tcp://127.0.0.1:6570");
+        assertThat(brc, is(true));
+
+        Helper.bounce(sb, sd);
+
+        //  Tear down the wiring.
+        ZMQ.close(sb);
+        ZMQ.close(sc);
+        ZMQ.close(sd);
+        ZMQ.term(ctx);
+
+    }
 }
