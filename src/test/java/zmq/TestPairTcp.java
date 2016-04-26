@@ -51,4 +51,35 @@ public class TestPairTcp
         ZMQ.term(ctx);
 
     }
+
+    @Test
+    public void testPairTpcSecondServer() throws InterruptedException
+    {
+        Ctx ctx = ZMQ.init(1);
+        assertThat(ctx, notNullValue());
+        SocketBase sb = ZMQ.socket(ctx, ZMQ.ZMQ_PAIR);
+        assertThat(sb, notNullValue());
+        boolean brc = ZMQ.bind(sb, "tcp://127.0.0.1:6570");
+        assertThat(brc, is(true));
+
+        SocketBase sc = ZMQ.socket(ctx, ZMQ.ZMQ_PAIR);
+        assertThat(sc, notNullValue());
+        brc = ZMQ.connect(sc, "tcp://127.0.0.1:6570");
+        assertThat(brc, is(true));
+
+        Helper.bounce(sb, sc);
+
+        SocketBase sd = ZMQ.socket(ctx, ZMQ.ZMQ_PAIR);
+        sd.monitor("inproc://events", ZMQ.ZMQ_EVENT_ALL);
+        assertThat(sd, notNullValue());
+        brc = ZMQ.bind(sd, "tcp://127.0.0.1:6570");
+        assertThat(brc, is(false));
+
+        //  Tear down the wiring.
+        ZMQ.close(sb);
+        ZMQ.close(sc);
+        ZMQ.close(sd);
+        ZMQ.term(ctx);
+
+    }
 }
