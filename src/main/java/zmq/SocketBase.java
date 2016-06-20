@@ -74,6 +74,9 @@ public abstract class SocketBase extends Own
 
     // Bitmask of events being monitored
     private int monitor_events;
+    
+    // A lock to protect concurrent access to the monitor
+    private Object monitor_guard = new Object();
 
     protected ValueReference<Integer> errno;
 
@@ -1067,23 +1070,25 @@ public abstract class SocketBase extends Own
         // Register events to monitor
         monitor_events = events_;
 
-        monitor_socket = get_ctx ().create_socket(ZMQ.ZMQ_PAIR);
-        if (monitor_socket == null)
-            return false;
-
-        // Never block context termination on pending event messages
-        int linger = 0;
-        try {
-            monitor_socket.setsockopt (ZMQ.ZMQ_LINGER, linger);
-        } catch (IllegalArgumentException e) {
-            stop_monitor ();
-            throw e;
+        synchronized (monitor_guard) {
+	        monitor_socket = get_ctx ().create_socket(ZMQ.ZMQ_PAIR);
+	        if (monitor_socket == null)
+	            return false;
+	
+	        // Never block context termination on pending event messages
+	        int linger = 0;
+	        try {
+	            monitor_socket.setsockopt (ZMQ.ZMQ_LINGER, linger);
+	        } catch (IllegalArgumentException e) {
+	            stop_monitor ();
+	            throw e;
+	        }
+	
+	        // Spawn the monitor socket endpoint
+	        rc = monitor_socket.bind (addr_);
+	        if (!rc)
+	             stop_monitor ();
         }
-
-        // Spawn the monitor socket endpoint
-        rc = monitor_socket.bind (addr_);
-        if (!rc)
-             stop_monitor ();
         return rc;
     }
 
@@ -1173,19 +1178,27 @@ public abstract class SocketBase extends Own
         if (monitor_socket == null)
             return;
 
-        event.write (monitor_socket);
+        synchronized (monitor_guard) {
+        	// Use a double lock to avoid performance issues
+        	// when monitor is not used
+        	// and avoid concurrent nullation of the monitor_socket
+        	if (monitor_socket != null) {
+        		event.write (monitor_socket);
+        	}
+		}
     }
 
     protected void stop_monitor ()
     {
-
-        if (monitor_socket != null) {
-            if ((monitor_events & ZMQ.ZMQ_EVENT_MONITOR_STOPPED) != 0)
-                monitor_event(new ZMQ.Event(ZMQ.ZMQ_EVENT_MONITOR_STOPPED, "", 0));
-            monitor_socket.close();
-            monitor_socket = null;
-            monitor_events = 0;
-        }
+    	synchronized (monitor_guard) {
+	        if (monitor_socket != null) {
+	            if ((monitor_events & ZMQ.ZMQ_EVENT_MONITOR_STOPPED) != 0)
+	                monitor_event(new ZMQ.Event(ZMQ.ZMQ_EVENT_MONITOR_STOPPED, "", 0));
+	            monitor_socket.close();
+	            monitor_socket = null;
+	            monitor_events = 0;
+	        }
+    	}
     }
 
     @Override
