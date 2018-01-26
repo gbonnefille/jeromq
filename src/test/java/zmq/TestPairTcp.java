@@ -85,17 +85,20 @@ public class TestPairTcp
 
     }
 
-   protected void sendUntilBlock(SocketBase sc) throws InterruptedException
+   protected void sendUntilBlock(final SocketBase sc) throws InterruptedException
    {
-       byte[] content = "12345678ABCDEFGH12345678abcdefgh".getBytes(ZMQ.CHARSET);
+       final byte[] content = "12345678ABCDEFGH12345678abcdefgh".getBytes(ZMQ.CHARSET);
 
-       runUntilBlock(() -> {
-           int rc = ZMQ.send(sc, content, 32, ZMQ.ZMQ_SNDMORE);
-           assertThat(rc, is(32));
-           rc = ZMQ.send(sc, content, 32, 0);
-           assertThat(rc, is(32));
-           return true;
-           }, 10, TimeUnit.SECONDS);
+       runUntilBlock(new Callable<Boolean>() {
+    	   public Boolean call()
+    	   {
+	           int rc = ZMQ.send(sc, content, 32, ZMQ.ZMQ_SNDMORE);
+	           assertThat(rc, is(32));
+	           rc = ZMQ.send(sc, content, 32, 0);
+	           assertThat(rc, is(32));
+	           return true;
+    	   }
+       }, 10, TimeUnit.SECONDS);
    }
 
    protected <V> void runUntilBlock(Callable<V> runnable, long timeout, TimeUnit unit) throws InterruptedException
