@@ -1,28 +1,15 @@
-/*
-    Copyright (c) 2007-2014 Contributors as noted in the AUTHORS file
-
-    This file is part of 0MQ.
-
-    0MQ is free software; you can redistribute it and/or modify it under
-    the terms of the GNU Lesser General Public License as published by
-    the Free Software Foundation; either version 3 of the License, or
-    (at your option) any later version.
-
-    0MQ is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU Lesser General Public License for more details.
-
-    You should have received a copy of the GNU Lesser General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
-
 package zmq;
 
-import org.junit.Test;
-import static org.junit.Assert.assertThat;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.notNullValue;
+import static org.junit.Assert.assertThat;
+
+import java.io.IOException;
+import java.util.UUID;
+
+import org.junit.Test;
+
+import zmq.util.Utils;
 
 public class TestLastEndpoint
 {
@@ -36,8 +23,11 @@ public class TestLastEndpoint
     }
 
     @Test
-    public void testLastEndpoint()
+    public void testLastEndpoint() throws IOException
     {
+        int port1 = Utils.findOpenPort();
+        int port2 = Utils.findOpenPort();
+
         //  Create the infrastructure
         Ctx ctx = ZMQ.init(1);
         assertThat(ctx, notNullValue());
@@ -45,9 +35,9 @@ public class TestLastEndpoint
         SocketBase sb = ZMQ.socket(ctx, ZMQ.ZMQ_ROUTER);
         assertThat(sb, notNullValue());
 
-        bindAndVerify(sb, "tcp://127.0.0.1:5560");
-        bindAndVerify(sb, "tcp://127.0.0.1:5561");
-        bindAndVerify(sb, "ipc:///tmp/testep");
+        bindAndVerify(sb, "tcp://127.0.0.1:" + port1);
+        bindAndVerify(sb, "tcp://127.0.0.1:" + port2);
+        bindAndVerify(sb, "ipc:///tmp/testep" + UUID.randomUUID().toString());
 
         sb.close();
         ctx.terminate();

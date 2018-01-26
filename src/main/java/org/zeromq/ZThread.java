@@ -1,24 +1,6 @@
-/*
-    Copyright (c) 2007-2014 Contributors as noted in the AUTHORS file
-
-    This file is part of 0MQ.
-
-    0MQ is free software; you can redistribute it and/or modify it under
-    the terms of the GNU Lesser General Public License as published by
-    the Free Software Foundation; either version 3 of the License, or
-    (at your option) any later version.
-
-    0MQ is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU Lesser General Public License for more details.
-
-    You should have received a copy of the GNU Lesser General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
-
 package org.zeromq;
 
+import org.zeromq.ZMQ.Error;
 import org.zeromq.ZMQ.Socket;
 
 public class ZThread
@@ -39,13 +21,13 @@ public class ZThread
 
     private static class ShimThread extends Thread
     {
-        private ZContext ctx;
+        private ZContext          ctx;
         private IAttachedRunnable attachedRunnable;
         private IDetachedRunnable detachedRunnable;
-        private Object[] args;
-        private Socket pipe;
+        private Object[]          args;
+        private Socket            pipe;
 
-        protected ShimThread(ZContext ctx, IAttachedRunnable runnable, Object [] args, Socket pipe)
+        protected ShimThread(ZContext ctx, IAttachedRunnable runnable, Object[] args, Socket pipe)
         {
             assert (ctx != null);
             assert (pipe != null);
@@ -68,7 +50,14 @@ public class ZThread
         public void run()
         {
             if (attachedRunnable != null) {
-                attachedRunnable.run(args, ctx, pipe);
+                try {
+                    attachedRunnable.run(args, ctx, pipe);
+                }
+                catch (ZMQException e) {
+                    if (e.getErrorCode() != Error.ETERM.getCode()) {
+                        throw e;
+                    }
+                }
                 ctx.destroy();
             }
             else {
@@ -82,7 +71,7 @@ public class ZThread
     //  and is used to simulate a separate process. It gets no ctx, and no
     //  pipe.
 
-    public static void start(IDetachedRunnable runnable, Object ... args)
+    public static void start(IDetachedRunnable runnable, Object... args)
     {
         //  Prepare child thread
         Thread shim = new ShimThread(runnable, args);
@@ -95,7 +84,7 @@ public class ZThread
     //  pipe back to its parent. It must monitor its pipe, and exit if the
     //  pipe becomes unreadable. Returns pipe, or null if there was an error.
 
-    public static Socket fork(ZContext ctx, IAttachedRunnable runnable, Object ... args)
+    public static Socket fork(ZContext ctx, IAttachedRunnable runnable, Object... args)
     {
         Socket pipe = ctx.createSocket(ZMQ.PAIR);
 

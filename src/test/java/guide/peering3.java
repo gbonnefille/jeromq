@@ -1,31 +1,12 @@
-/*
-    Copyright (c) 2007-2014 Contributors as noted in the AUTHORS file
-
-    This file is part of 0MQ.
-
-    0MQ is free software; you can redistribute it and/or modify it under
-    the terms of the GNU Lesser General Public License as published by
-    the Free Software Foundation; either version 3 of the License, or
-    (at your option) any later version.
-
-    0MQ is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU Lesser General Public License for more details.
-
-    You should have received a copy of the GNU Lesser General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
-
 package guide;
 
+import java.nio.channels.Selector;
 import java.util.ArrayList;
 import java.util.Random;
 
 import org.zeromq.ZContext;
 import org.zeromq.ZFrame;
 import org.zeromq.ZMQ;
-import org.zeromq.ZMQ.PollItem;
 import org.zeromq.ZMQ.Poller;
 import org.zeromq.ZMQ.Socket;
 import org.zeromq.ZMsg;
@@ -36,9 +17,9 @@ import org.zeromq.ZMsg;
 public class peering3
 {
 
-    private static final int NBR_CLIENTS = 10;
-    private static final int NBR_WORKERS = 5;
-    private static final String WORKER_READY = "\001";      //  Signals worker is ready
+    private static final int    NBR_CLIENTS  = 10;
+    private static final int    NBR_WORKERS  = 5;
+    private static final String WORKER_READY = "\001"; //  Signals worker is ready
 
     //  Our own name; in practice this would be configured per node
     private static String self;
@@ -54,17 +35,22 @@ public class peering3
         public void run()
         {
             ZContext ctx = new ZContext();
+            Selector selector = ctx.createSelector();
             Socket client = ctx.createSocket(ZMQ.REQ);
             client.connect(String.format("ipc://%s-localfe.ipc", self));
             Socket monitor = ctx.createSocket(ZMQ.PUSH);
             monitor.connect(String.format("ipc://%s-monitor.ipc", self));
             Random rand = new Random(System.nanoTime());
 
+            Poller poller = ctx.createPoller(1);
+            poller.register(client, Poller.POLLIN);
+
             while (true) {
 
                 try {
                     Thread.sleep(rand.nextInt(5) * 1000);
-                } catch (InterruptedException e1) {
+                }
+                catch (InterruptedException e1) {
                 }
                 int burst = rand.nextInt(15);
 
@@ -74,22 +60,21 @@ public class peering3
                     client.send(taskId, 0);
 
                     //  Wait max ten seconds for a reply, then complain
-                    PollItem pollSet[] = {new PollItem(client, Poller.POLLIN)};
-                    int rc = ZMQ.poll(pollSet, 10 * 1000);
+                    int rc = poller.poll(10 * 1000);
                     if (rc == -1)
-                        break;          //  Interrupted
+                        break; //  Interrupted
 
-                    if (pollSet[0].isReadable()) {
+                    if (poller.pollin(0)) {
                         String reply = client.recvStr(0);
                         if (reply == null)
-                            break;              //  Interrupted
+                            break; //  Interrupted
                         //  Worker is supposed to answer us with our task id
                         assert (reply.equals(taskId));
                         monitor.send(String.format("%s", reply), 0);
-                    } else {
-                        monitor.send(
-                                String.format("E: CLIENT EXIT - lost task %s", taskId), 0);
-                        ctx.destroy();
+                    }
+                    else {
+                        monitor.send(String.format("E: CLIENT EXIT - lost task %s", taskId), 0);
+                        ctx.close();
                         return;
                     }
                     burst--;
@@ -119,18 +104,19 @@ public class peering3
                 //  Send request, get reply
                 ZMsg msg = ZMsg.recvMsg(worker, 0);
                 if (msg == null)
-                    break;              //  Interrupted
+                    break; //  Interrupted
 
                 //  Workers are busy for 0/1 seconds
                 try {
                     Thread.sleep(rand.nextInt(2) * 1000);
-                } catch (InterruptedException e) {
+                }
+                catch (InterruptedException e) {
                 }
 
                 msg.send(worker);
 
             }
-            ctx.destroy();
+            ctx.close();
         }
     }
 
@@ -155,13 +141,13 @@ public class peering3
         Random rand = new Random(System.nanoTime());
 
         ZContext ctx = new ZContext();
+        Selector selector = ctx.createSelector();
 
         //  Prepare local frontend and backend
         Socket localfe = ctx.createSocket(ZMQ.ROUTER);
         localfe.bind(String.format("ipc://%s-localfe.ipc", self));
         Socket localbe = ctx.createSocket(ZMQ.ROUTER);
         localbe.bind(String.format("ipc://%s-localbe.ipc", self));
-
 
         //  Bind cloud frontend to endpoint
         Socket cloudfe = ctx.createSocket(ZMQ.ROUTER);
@@ -214,31 +200,33 @@ public class peering3
         //  sockets (statefe and monitor), in any case. If we have no ready workers,
         //  there's no point in looking at incoming requests. These can remain on
         //  their internal 0MQ queues:
+        Poller primary = ctx.createPoller(4);
+        primary.register(localbe, Poller.POLLIN);
+        primary.register(cloudbe, Poller.POLLIN);
+        primary.register(statefe, Poller.POLLIN);
+        primary.register(monitor, Poller.POLLIN);
+
+        Poller secondary = ctx.createPoller(2);
+        secondary.register(localfe, Poller.POLLIN);
+        secondary.register(cloudfe, Poller.POLLIN);
 
         while (true) {
             //  First, route any waiting replies from workers
-            PollItem primary[] = {
-                    new PollItem(localbe, Poller.POLLIN),
-                    new PollItem(cloudbe, Poller.POLLIN),
-                    new PollItem(statefe, Poller.POLLIN),
-                    new PollItem(monitor, Poller.POLLIN)
-            };
+
             //  If we have no workers anyhow, wait indefinitely
-            int rc = ZMQ.poll(primary,
-                    localCapacity > 0 ? 1000 : -1);
+            int rc = primary.poll(localCapacity > 0 ? 1000 : -1);
             if (rc == -1)
-                break;              //  Interrupted
+                break; //  Interrupted
 
             //  Track if capacity changes during this iteration
             int previous = localCapacity;
 
-
             //  Handle reply from local worker
             ZMsg msg = null;
-            if (primary[0].isReadable()) {
+            if (primary.pollin(0)) {
                 msg = ZMsg.recvMsg(localbe);
                 if (msg == null)
-                    break;          //  Interrupted
+                    break; //  Interrupted
                 ZFrame address = msg.unwrap();
                 workers.add(address);
                 localCapacity++;
@@ -251,10 +239,10 @@ public class peering3
                 }
             }
             //  Or handle reply from peer broker
-            else if (primary[1].isReadable()) {
+            else if (primary.pollin(1)) {
                 msg = ZMsg.recvMsg(cloudbe);
                 if (msg == null)
-                    break;          //  Interrupted
+                    break; //  Interrupted
                 //  We don't use peer broker address for anything
                 ZFrame address = msg.unwrap();
                 address.destroy();
@@ -274,12 +262,12 @@ public class peering3
             //  If we have input messages on our statefe or monitor sockets we
             //  can process these immediately:
 
-            if (primary[2].isReadable()) {
+            if (primary.pollin(2)) {
                 String peer = statefe.recvStr();
                 String status = statefe.recvStr();
                 cloudCapacity = Integer.parseInt(status);
             }
-            if (primary[3].isReadable()) {
+            if (primary.pollin(3)) {
                 String status = monitor.recvStr();
                 System.out.println(status);
             }
@@ -291,24 +279,17 @@ public class peering3
             //  cloud capacity://
 
             while (localCapacity + cloudCapacity > 0) {
-                PollItem secondary[] = {
-                        new PollItem(localfe, Poller.POLLIN),
-                        new PollItem(cloudfe, Poller.POLLIN)
-                };
-
-                if (localCapacity > 0)
-                    rc = ZMQ.poll(secondary, 2, 0);
-                else
-                    rc = ZMQ.poll(secondary, 1, 0);
+                rc = secondary.poll(0);
 
                 assert (rc >= 0);
 
-                if (secondary[0].isReadable()) {
+                if (secondary.pollin(0)) {
                     msg = ZMsg.recvMsg(localfe);
-                } else if (secondary[1].isReadable()) {
+                }
+                else if (localCapacity > 0 && secondary.pollin(1)) {
                     msg = ZMsg.recvMsg(cloudfe);
-                } else
-                    break;      //  No work, go back to backends
+                }
+                else break; //  No work, go back to backends
 
                 if (localCapacity > 0) {
                     ZFrame frame = workers.remove(0);
@@ -316,7 +297,8 @@ public class peering3
                     msg.send(localbe);
                     localCapacity--;
 
-                } else {
+                }
+                else {
                     //  Route to random broker peer
                     int random_peer = rand.nextInt(argv.length - 1) + 1;
                     msg.push(argv[random_peer]);
@@ -340,6 +322,6 @@ public class peering3
             frame.destroy();
         }
 
-        ctx.destroy();
+        ctx.close();
     }
 }

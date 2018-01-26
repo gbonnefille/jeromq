@@ -1,30 +1,9 @@
-/*
-    Copyright (c) 2007-2014 Contributors as noted in the AUTHORS file
-
-    This file is part of 0MQ.
-
-    0MQ is free software; you can redistribute it and/or modify it under
-    the terms of the GNU Lesser General Public License as published by
-    the Free Software Foundation; either version 3 of the License, or
-    (at your option) any later version.
-
-    0MQ is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU Lesser General Public License for more details.
-
-    You should have received a copy of the GNU Lesser General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
-
 package guide;
 
-import org.zeromq.ZContext;
 import org.zeromq.ZLoop;
 import org.zeromq.ZLoop.IZLoopHandler;
 import org.zeromq.ZMQ;
 import org.zeromq.ZMQ.PollItem;
-import org.zeromq.ZMQ.Socket;
 import org.zeromq.ZMsg;
 
 //  Binary Star server, using bstar reactor
@@ -41,7 +20,8 @@ public class bstarsrv2
         }
     };
 
-    public static void main(String[] argv) {
+    public static void main(String[] argv)
+    {
         //  Arguments can be either of:
         //      -p  primary server, at tcp://localhost:5001
         //      -b  backup server, at tcp://localhost:5002
@@ -50,13 +30,12 @@ public class bstarsrv2
         if (argv.length == 1 && argv[0].equals("-p")) {
             System.out.printf("I: Primary active, waiting for backup (passive)\n");
             bs = new bstar(true, "tcp://*:5003", "tcp://localhost:5004");
-            bs.voter ("tcp://*:5001", ZMQ.ROUTER, Echo, null);
+            bs.voter("tcp://*:5001", ZMQ.ROUTER, Echo, null);
         }
-        else
-        if (argv.length == 1 && argv[0].equals("-b")) {
+        else if (argv.length == 1 && argv[0].equals("-b")) {
             System.out.printf("I: Backup passive, waiting for primary (active)\n");
             bs = new bstar(false, "tcp://*:5004", "tcp://localhost:5003");
-            bs.voter ("tcp://*:5002", ZMQ.ROUTER, Echo, null);
+            bs.voter("tcp://*:5002", ZMQ.ROUTER, Echo, null);
         }
         else {
             System.out.printf("Usage: bstarsrv { -p | -b }\n");

@@ -1,26 +1,12 @@
 package org.zeromq;
-/*
-    Copyright (c) 2007-2014 Contributors as noted in the AUTHORS file
 
-    This file is part of 0MQ.
-
-    0MQ is free software; you can redistribute it and/or modify it under
-    the terms of the GNU Lesser General Public License as published by
-    the Free Software Foundation; either version 3 of the License, or
-    (at your option) any later version.
-
-    0MQ is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU Lesser General Public License for more details.
-
-    You should have received a copy of the GNU Lesser General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
- */
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.notNullValue;
 import static org.junit.Assert.assertThat;
 
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.junit.Test;
@@ -29,7 +15,6 @@ import org.zeromq.ZMQ.Socket;
 /**
  * Tests a REQ-ROUTER dialog with several methods,
  * each component being on a separate thread.
- * @author fred
  *
  */
 public class TestReqRouterThreadedTcp
@@ -38,10 +23,9 @@ public class TestReqRouterThreadedTcp
 
     /**
      * A very simple server for one reply only.
-     * @author fred
      *
      */
-    private class Server extends Thread
+    private class Server implements Runnable
     {
         private final int port;
 
@@ -62,9 +46,13 @@ public class TestReqRouterThreadedTcp
             ZMQ.Socket server = ctx.createSocket(ZMQ.ROUTER);
             server.bind("tcp://localhost:" + port);
 
+            System.out.println("Server started");
             ZMsg msg = ZMsg.recvMsg(server);
             // only one echo message for this server
             msg.send(server);
+            System.out.println("Server sent reply");
+
+            zmq.ZMQ.sleep(1);
 
             msg.destroy();
 
@@ -74,7 +62,7 @@ public class TestReqRouterThreadedTcp
         }
     }
 
-    private class Client extends Thread
+    private class Client implements Runnable
     {
         private final int port;
 
@@ -98,26 +86,29 @@ public class TestReqRouterThreadedTcp
 
             client.connect("tcp://localhost:" + port);
 
+            System.out.println("Client started");
             client.send("DATA");
+            System.out.println("Client sent message");
 
-            inBetween(client);
+            inBetween(ctx, client);
 
             String reply = client.recvStr();
+            System.out.println("Client received message");
             assertThat(reply, notNullValue());
             assertThat(reply, is("DATA"));
+
+            finished.set(true);
 
             // Clean up.
             ctx.destroySocket(client);
             ctx.close();
-
-            finished.set(true);
         }
 
         /**
          * Called between the request-reply cycle.
          * @param client the socket participating to the cycle of request-reply
          */
-        protected void inBetween(Socket client)
+        protected void inBetween(ZContext ctx, Socket client)
         {
             // to be overriden
         }
@@ -131,25 +122,26 @@ public class TestReqRouterThreadedTcp
         }
 
         // same results
-//        @Override
-//        protected void inBetween(Socket client) {
-//            // Poll socket for a reply, with timeout
-//            PollItem items[] = { new PollItem(client, ZMQ.Poller.POLLIN) };
-//            int rc = ZMQ.poll(items, 1, REQUEST_TIMEOUT);
-//            assertThat(rc, is(1));
-//            boolean readable = items[0].isReadable();
-//              assertThat(readable, is(true));
-//        }
-
+        //        @Override
+        //        protected void inBetween(ZContext ctx, Socket client)
+        //        {
+        //            // Poll socket for a reply, with timeout
+        //            PollItem items[] = { new PollItem(client, ZMQ.Poller.POLLIN) };
+        //            int rc = ZMQ.poll(items, 1, REQUEST_TIMEOUT);
+        //            assertThat(rc, is(1));
+        //            boolean readable = items[0].isReadable();
+        //            assertThat(readable, is(true));
+        //        }
+        //
         /**
          * Here we use a poller to check for readability of the message.
          * This should activate the prefetching mechanism.
          */
         @Override
-        protected void inBetween(Socket client)
+        protected void inBetween(ZContext ctx, Socket client)
         {
             // Poll socket for a reply, with timeout
-            ZMQ.Poller poller = new ZMQ.Poller(1);
+            ZMQ.Poller poller = ctx.createPoller(1);
             poller.register(client, ZMQ.Poller.POLLIN);
 
             int rc = poller.poll(REQUEST_TIMEOUT);
@@ -168,16 +160,18 @@ public class TestReqRouterThreadedTcp
     @Test
     public void testReqRouterTcp() throws Exception
     {
-        int port = 5962;
+        System.out.println("test Req + Router");
+        int port = Utils.findOpenPort();
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+
         Server server = new Server(port);
-
-        server.start();
-
         Client client = new Client(port);
-        client.start();
 
-        server.join();
-        client.join();
+        executor.submit(server);
+        executor.submit(client);
+
+        executor.shutdown();
+        executor.awaitTermination(30, TimeUnit.SECONDS);
 
         boolean finished = client.finished.get();
         assertThat(finished, is(true));
@@ -191,16 +185,18 @@ public class TestReqRouterThreadedTcp
     @Test
     public void testReqRouterTcpPoll() throws Exception
     {
-        int port = 5963;
+        System.out.println("test Req + Router with polling");
+        int port = Utils.findOpenPort();
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+
         Server server = new Server(port);
-
-        server.start();
-
         ClientPoll client = new ClientPoll(port);
-        client.start();
 
-        server.join();
-        client.join();
+        executor.submit(server);
+        executor.submit(client);
+
+        executor.shutdown();
+        executor.awaitTermination(30, TimeUnit.SECONDS);
 
         boolean finished = client.finished.get();
         assertThat(finished, is(true));

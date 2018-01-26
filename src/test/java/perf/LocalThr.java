@@ -1,22 +1,3 @@
-/*
-    Copyright (c) 2007-2014 Contributors as noted in the AUTHORS file
-
-    This file is part of 0MQ.
-
-    0MQ is free software; you can redistribute it and/or modify it under
-    the terms of the GNU Lesser General Public License as published by
-    the Free Software Foundation; either version 3 of the License, or
-    (at your option) any later version.
-
-    0MQ is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU Lesser General Public License for more details.
-
-    You should have received a copy of the GNU Lesser General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
-
 package perf;
 
 import zmq.Ctx;
@@ -34,7 +15,7 @@ public class LocalThr
     {
         String bindTo;
         long messageCount;
-        int  messageSize;
+        int messageSize;
         Ctx ctx;
         SocketBase s;
         boolean rc;
@@ -49,9 +30,9 @@ public class LocalThr
             printf("usage: local_thr <bind-to> <message-size> <message-count>\n");
             return;
         }
-        bindTo = argv [0];
-        messageSize = atoi(argv [1]);
-        messageCount = atol(argv [2]);
+        bindTo = argv[0];
+        messageSize = atoi(argv[1]);
+        messageCount = atol(argv[2]);
 
         ctx = ZMQ.init(1);
         if (ctx == null) {
@@ -98,8 +79,7 @@ public class LocalThr
             elapsed = 1;
         }
 
-        throughput = (long)
-                ((double) messageCount / (double) elapsed * 1000000L);
+        throughput = (long) ((double) messageCount / (double) elapsed * 1000000L);
         megabits = (double) (throughput * messageSize * 8) / 1000000;
 
         printf("message elapsed: %.3f \n", (double) elapsed / 1000000L);
@@ -113,7 +93,7 @@ public class LocalThr
         ZMQ.term(ctx);
     }
 
-    private static void printf(String str, Object ... args)
+    private static void printf(String str, Object... args)
     {
         // TODO Auto-generated method stub
         System.out.println(String.format(str, args));

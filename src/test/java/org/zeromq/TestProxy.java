@@ -1,160 +1,246 @@
-/*
-    Copyright (c) 2007-2014 Contributors as noted in the AUTHORS file
-
-    This file is part of 0MQ.
-
-    0MQ is free software; you can redistribute it and/or modify it under
-    the terms of the GNU Lesser General Public License as published by
-    the Free Software Foundation; either version 3 of the License, or
-    (at your option) any later version.
-
-    0MQ is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU Lesser General Public License for more details.
-
-    You should have received a copy of the GNU Lesser General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
-
 package org.zeromq;
 
+import static org.hamcrest.CoreMatchers.is;
+import static org.hamcrest.CoreMatchers.notNullValue;
+import static org.junit.Assert.assertThat;
+
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import org.junit.Test;
 import org.zeromq.ZMQ.Context;
 import org.zeromq.ZMQ.Socket;
-import org.junit.Test;
-
-import static org.junit.Assert.assertNotNull;
 
 public class TestProxy
 {
-    static class Client extends Thread
+    static class Client implements Runnable
     {
-        private Socket s = null;
-        private String name = null;
-        public Client(Context ctx, String name)
-        {
-            s = ctx.socket(ZMQ.REQ);
-            this.name = name;
+        private final String        frontend;
+        private final String        name;
+        private final AtomicBoolean result = new AtomicBoolean();
 
-            s.setIdentity(name.getBytes(ZMQ.CHARSET));
+        public Client(String name, String frontend)
+        {
+            this.name = name;
+            this.frontend = frontend;
         }
 
         @Override
         public void run()
         {
-            s.connect("tcp://127.0.0.1:6660");
-            s.send("hello", 0);
-            String msg = s.recvStr(0);
-            s.send("world", 0);
-            msg = s.recvStr(0);
+            Context ctx = ZMQ.context(1);
+            assertThat(ctx, notNullValue());
 
-            s.close();
+            Socket socket = ctx.socket(ZMQ.REQ);
+            boolean rc;
+            rc = socket.setIdentity(name.getBytes(ZMQ.CHARSET));
+            assertThat(rc, is(true));
+
+            System.out.println("Start " + name);
+            Thread.currentThread().setName(name);
+
+            rc = socket.connect(frontend);
+            assertThat(rc, is(true));
+
+            result.set(process(socket));
+            socket.close();
+            ctx.close();
+            System.out.println("Stop " + name);
+        }
+
+        private boolean process(Socket socket)
+        {
+            boolean rc = socket.send("hello");
+            if (!rc) {
+                System.out.println(name + " unable to send first message");
+                return false;
+            }
+            System.out.println(name + " sent 1st message");
+            String msg = socket.recvStr(0);
+            System.out.println(name + " received " + msg);
+            if (msg == null || !msg.startsWith("OK hello")) {
+                return false;
+            }
+            rc = socket.send("world");
+            if (!rc) {
+                System.out.println(name + " unable to send second message");
+                return false;
+            }
+            msg = socket.recvStr(0);
+            System.out.println(name + " received " + msg);
+            if (msg == null || !msg.startsWith("OK world")) {
+                return false;
+            }
+
+            return true;
         }
     }
 
-    static class Dealer extends Thread
+    static class Dealer implements Runnable
     {
-        private Socket s = null;
-        private String name = null;
-        public Dealer(Context ctx, String name)
-        {
-            s = ctx.socket(ZMQ.DEALER);
-            this.name = name;
+        private final String        backend;
+        private final String        name;
+        private final AtomicBoolean result = new AtomicBoolean();
 
-            s.setIdentity(name.getBytes(ZMQ.CHARSET));
+        public Dealer(String name, String backend)
+        {
+            this.name = name;
+            this.backend = backend;
         }
 
         @Override
         public void run()
         {
-            System.out.println("Start dealer " + name);
+            Context ctx = ZMQ.context(1);
+            assertThat(ctx, notNullValue());
 
-            s.connect("tcp://127.0.0.1:6661");
+            Thread.currentThread().setName(name);
+            System.out.println("Start " + name);
+
+            Socket socket = ctx.socket(ZMQ.DEALER);
+            boolean rc;
+            rc = socket.setIdentity(name.getBytes(ZMQ.CHARSET));
+            assertThat(rc, is(true));
+            rc = socket.connect(backend);
+            assertThat(rc, is(true));
+
+            result.set(process(socket));
+            socket.close();
+            ctx.close();
+            System.out.println("Stop " + name);
+        }
+
+        private boolean process(Socket socket)
+        {
             int count = 0;
             while (count < 2) {
-                String msg = s.recvStr(0);
-                if (msg == null) {
-                    throw new RuntimeException();
+                String msg = socket.recvStr(0);
+                if (msg == null || !msg.startsWith("Client-")) {
+                    System.out.println(name + " Wrong identity " + msg);
+                    return false;
                 }
-                String identity = msg;
+                final String identity = msg;
                 System.out.println(name + " received client identity " + identity);
-                msg = s.recvStr(0);
-                if (msg == null) {
-                    throw new RuntimeException();
+
+                msg = socket.recvStr(0);
+                if (msg == null || !msg.isEmpty()) {
+                    System.out.println("Not bottom " + msg);
+                    return false;
                 }
                 System.out.println(name + " received bottom " + msg);
 
-                msg = s.recvStr(0);
+                msg = socket.recvStr(0);
                 if (msg == null) {
-                    throw new RuntimeException();
+                    System.out.println(name + " Not data " + msg);
+                    return false;
                 }
-                String data = msg;
+                System.out.println(name + " received data " + msg);
 
-                System.out.println(name + " received data " + msg + " " + data);
-                s.send(identity, ZMQ.SNDMORE);
-                s.send((byte[]) null, ZMQ.SNDMORE);
+                socket.send(identity, ZMQ.SNDMORE);
+                socket.send((byte[]) null, ZMQ.SNDMORE);
 
-                String response = "OK " + data;
+                String response = "OK " + msg + " " + name;
 
-                s.send(response, 0);
+                socket.send(response, 0);
                 count++;
             }
-            s.close();
-            System.out.println("Stop dealer " + name);
+            return true;
         }
     }
 
-    static class Main extends Thread
+    static class Proxy extends Thread
     {
-        Context ctx;
-        Main(Context ctx)
+        private final String        frontend;
+        private final String        backend;
+        private final String        control;
+        private final AtomicBoolean result = new AtomicBoolean();
+
+        Proxy(String frontend, String backend, String control)
         {
-            this.ctx = ctx;
+            this.frontend = frontend;
+            this.backend = backend;
+            this.control = control;
         }
 
         @Override
         public void run()
         {
+            Context ctx = ZMQ.context(1);
+            assert (ctx != null);
+
+            setName("Proxy");
             Socket frontend = ctx.socket(ZMQ.ROUTER);
 
-            assertNotNull(frontend);
-            frontend.bind("tcp://127.0.0.1:6660");
+            assertThat(frontend, notNullValue());
+            frontend.bind(this.frontend);
 
             Socket backend = ctx.socket(ZMQ.DEALER);
-            assertNotNull(backend);
-            backend.bind("tcp://127.0.0.1:6661");
+            assertThat(backend, notNullValue());
+            backend.bind(this.backend);
 
-            ZMQ.proxy(frontend, backend, null);
+            Socket control = ctx.socket(ZMQ.PAIR);
+            assertThat(control, notNullValue());
+            control.bind(this.control);
+
+            ZMQ.proxy(frontend, backend, null, control);
 
             frontend.close();
             backend.close();
-
-            assert true;
+            control.close();
+            ctx.close();
+            result.set(true);
         }
 
     }
 
     @Test
-    public void testProxy()  throws Exception
+    public void testProxy() throws Exception
     {
-        Context ctx = ZMQ.context(1);
-        assert (ctx != null);
+        String frontend = "tcp://localhost:" + Utils.findOpenPort();
+        String backend = "tcp://localhost:" + Utils.findOpenPort();
+        String controlEndpoint = "tcp://localhost:" + Utils.findOpenPort();
 
-        Main mt = new Main(ctx);
-        mt.start();
-        new Dealer(ctx, "AA").start();
-        new Dealer(ctx, "BB").start();
+        Proxy proxy = new Proxy(frontend, backend, controlEndpoint);
+        proxy.start();
+
+        ExecutorService executor = Executors.newFixedThreadPool(4);
+        Dealer d1 = new Dealer("Dealer-A", backend);
+        Dealer d2 = new Dealer("Dealer-B", backend);
+        executor.submit(d1);
+        executor.submit(d2);
 
         Thread.sleep(1000);
-        Thread c1 = new Client(ctx, "X");
-        c1.start();
+        Client c1 = new Client("Client-X", frontend);
+        Client c2 = new Client("Client-Y", frontend);
+        executor.submit(c1);
+        executor.submit(c2);
 
-        Thread c2 = new Client(ctx, "Y");
-        c2.start();
+        executor.shutdown();
+        executor.awaitTermination(40, TimeUnit.SECONDS);
 
-        c1.join();
-        c2.join();
+        Context ctx = ZMQ.context(1);
+        Socket control = ctx.socket(ZMQ.PAIR);
+        control.connect(controlEndpoint);
+        control.send("TERMINATE");
+        proxy.join();
+        control.close();
+        ctx.close();
 
-        ctx.term();
+        assertThat(c1.result.get(), is(true));
+        assertThat(c2.result.get(), is(true));
+        assertThat(d1.result.get(), is(true));
+        assertThat(d2.result.get(), is(true));
+        assertThat(proxy.result.get(), is(true));
+    }
+
+    public void testRepeated() throws Exception
+    {
+        for (int idx = 0; idx < 470; ++idx) {
+            System.out.println("---------- " + idx);
+            testProxy();
+            Thread.sleep(1000);
+        }
     }
 }

@@ -1,22 +1,3 @@
-/*
-    Copyright (c) 2007-2014 Contributors as noted in the AUTHORS file
-
-    This file is part of 0MQ.
-
-    0MQ is free software; you can redistribute it and/or modify it under
-    the terms of the GNU Lesser General Public License as published by
-    the Free Software Foundation; either version 3 of the License, or
-    (at your option) any later version.
-
-    0MQ is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU Lesser General Public License for more details.
-
-    You should have received a copy of the GNU Lesser General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
-
 package zmq;
 
 import java.net.SocketException;
@@ -58,36 +39,48 @@ public class ZError
         }
     }
 
-    public static final int EINTR = 4;
-    public static final int EACCESS = 13;
-    public static final int EFAULT = 14;
-    public static final int EINVAL = 22;
-    public static final int EAGAIN = 35;
-    public static final int EINPROGRESS = 36;
+    public static final int ENOENT          = 2;
+    public static final int EINTR           = 4;
+    public static final int EACCESS         = 13;
+    public static final int EFAULT          = 14;
+    public static final int EINVAL          = 22;
+    public static final int EAGAIN          = 35;
+    public static final int EINPROGRESS     = 36;
     public static final int EPROTONOSUPPORT = 43;
-    public static final int ENOTSUP = 45;
-    public static final int EADDRINUSE = 48;
-    public static final int EADDRNOTAVAIL = 49;
-    public static final int ENETDOWN = 50;
-    public static final int ENOBUFS = 55;
-    public static final int EISCONN = 56;
-    public static final int ENOTCONN = 57;
-    public static final int ECONNREFUSED = 61;
-    public static final int EHOSTUNREACH = 65;
+    public static final int ENOTSUP         = 45;
+    public static final int EADDRINUSE      = 48;
+    public static final int EADDRNOTAVAIL   = 49;
+    public static final int ENETDOWN        = 50;
+    public static final int ENOBUFS         = 55;
+    public static final int EISCONN         = 56;
+    public static final int ENOTCONN        = 57;
+    public static final int ECONNREFUSED    = 61;
+    public static final int EHOSTUNREACH    = 65;
 
     private static final int ZMQ_HAUSNUMERO = 156384712;
 
-    public static final int ENOTSOCK = ZMQ_HAUSNUMERO + 5;
-    public static final int EFSM = ZMQ_HAUSNUMERO + 51;
+    public static final int ENOTSOCK     = ZMQ_HAUSNUMERO + 5;
+    public static final int EMSGSIZE     = ZMQ_HAUSNUMERO + 10;
+    public static final int EAFNOSUPPORT = ZMQ_HAUSNUMERO + 11;
+    public static final int ENETUNREACH  = ZMQ_HAUSNUMERO + 12;
+
+    public static final int ECONNABORTED = ZMQ_HAUSNUMERO + 13;
+    public static final int ECONNRESET   = ZMQ_HAUSNUMERO + 14;
+    public static final int ETIMEDOUT    = ZMQ_HAUSNUMERO + 16;
+    public static final int ENETRESET    = ZMQ_HAUSNUMERO + 18;
+
+    public static final int EFSM           = ZMQ_HAUSNUMERO + 51;
     public static final int ENOCOMPATPROTO = ZMQ_HAUSNUMERO + 52;
-    public static final int ETERM = ZMQ_HAUSNUMERO + 53;
-    public static final int EMTHREAD = ZMQ_HAUSNUMERO + 54;
+    public static final int ETERM          = ZMQ_HAUSNUMERO + 53;
+    public static final int EMTHREAD       = ZMQ_HAUSNUMERO + 54;
 
-    public static final int EIOEXC = ZMQ_HAUSNUMERO + 105;
+    public static final int EIOEXC  = ZMQ_HAUSNUMERO + 105;
     public static final int ESOCKET = ZMQ_HAUSNUMERO + 106;
-    public static final int EMFILE = ZMQ_HAUSNUMERO + 107;
+    public static final int EMFILE  = ZMQ_HAUSNUMERO + 107;
 
-    static int exccode(java.io.IOException e)
+    public static final int EPROTO = ZMQ_HAUSNUMERO + 108;
+
+    public static int exccode(java.io.IOException e)
     {
         if (e instanceof SocketException) {
             return ESOCKET;

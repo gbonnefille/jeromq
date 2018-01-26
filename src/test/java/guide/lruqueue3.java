@@ -1,37 +1,19 @@
-/*
-    Copyright (c) 2007-2014 Contributors as noted in the AUTHORS file
-
-    This file is part of 0MQ.
-
-    0MQ is free software; you can redistribute it and/or modify it under
-    the terms of the GNU Lesser General Public License as published by
-    the Free Software Foundation; either version 3 of the License, or
-    (at your option) any later version.
-
-    0MQ is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU Lesser General Public License for more details.
-
-    You should have received a copy of the GNU Lesser General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
-
 package guide;
 
 import java.util.LinkedList;
 import java.util.Queue;
 
+import org.zeromq.ZContext;
+import org.zeromq.ZFrame;
 import org.zeromq.ZLoop;
 import org.zeromq.ZMQ;
 import org.zeromq.ZMQ.PollItem;
 import org.zeromq.ZMQ.Socket;
-import org.zeromq.ZContext;
-import org.zeromq.ZFrame;
 import org.zeromq.ZMsg;
 
 class ClientThread3 extends Thread
 {
+    @Override
     public void run()
     {
         ZContext context = new ZContext();
@@ -52,19 +34,21 @@ class ClientThread3 extends Thread
             String reply = new String(data, ZMQ.CHARSET);
             try {
                 Thread.sleep(1000);
-            } catch (InterruptedException e) {
+            }
+            catch (InterruptedException e) {
             }
 
             System.out.println(Thread.currentThread().getName() + " Client Sent HELLO");
 
         }
-        context.destroy();
+        context.close();
     }
 }
 
 class WorkerThread3 extends Thread
 {
 
+    @Override
     public void run()
     {
         ZContext context = new ZContext();
@@ -88,18 +72,17 @@ class WorkerThread3 extends Thread
             System.out.println(Thread.currentThread().getName() + " Worker Sent OK");
         }
 
-        context.destroy();
+        context.close();
     }
 }
 
 //Our LRU queue structure, passed to reactor handlers
 class LRUQueueArg
 {
-    Socket frontend;             //  Listen to clients
-    Socket backend;              //  Listen to workers
-    Queue<ZFrame> workers;       //  List of ready workers
+    Socket        frontend; //  Listen to clients
+    Socket        backend;  //  Listen to workers
+    Queue<ZFrame> workers;  //  List of ready workers
 };
-
 
 //In the reactor design, each time a message arrives on a socket, the
 //reactor passes it to a handler function. We have two handlers; one
@@ -153,8 +136,7 @@ class BackendHandler implements ZLoop.IZLoopHandler
             ZFrame frame = msg.getFirst();
             if (new String(frame.getData(), ZMQ.CHARSET).equals(lruqueue3.LRU_READY))
                 msg.destroy();
-            else
-                msg.send(arg.frontend);
+            else msg.send(arg.frontend);
         }
         return 0;
     }
@@ -164,9 +146,9 @@ class BackendHandler implements ZLoop.IZLoopHandler
 public class lruqueue3
 {
 
-    public final static String LRU_READY = "\001";
+    public final static String             LRU_READY       = "\001";
     protected final static FrontendHandler handle_frontend = new FrontendHandler();
-    protected final static BackendHandler handle_backend = new BackendHandler();
+    protected final static BackendHandler  handle_backend  = new BackendHandler();
 
     public static void main(String[] args)
     {
@@ -177,7 +159,6 @@ public class lruqueue3
         Socket backend = context.createSocket(ZMQ.ROUTER);
         arg.frontend = frontend;
         arg.backend = backend;
-
 
         frontend.bind("ipc://frontend.ipc");
         backend.bind("ipc://backend.ipc");
@@ -194,19 +175,18 @@ public class lruqueue3
         arg.workers = new LinkedList<ZFrame>();
 
         //  Prepare reactor and fire it up
-        ZLoop reactor = new ZLoop();
+        ZLoop reactor = new ZLoop(context);
         reactor.verbose(true);
         PollItem poller = new PollItem(arg.backend, ZMQ.Poller.POLLIN);
         reactor.addPoller(poller, handle_backend, arg);
         reactor.start();
         reactor.destroy();
 
-
         for (ZFrame frame : arg.workers) {
             frame.destroy();
         }
 
-        context.destroy();
+        context.close();
 
         System.exit(0);
 

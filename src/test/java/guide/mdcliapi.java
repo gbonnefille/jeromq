@@ -1,22 +1,3 @@
-/*
-    Copyright (c) 2007-2014 Contributors as noted in the AUTHORS file
-
-    This file is part of 0MQ.
-
-    0MQ is free software; you can redistribute it and/or modify it under
-    the terms of the GNU Lesser General Public License as published by
-    the Free Software Foundation; either version 3 of the License, or
-    (at your option) any later version.
-
-    0MQ is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU Lesser General Public License for more details.
-
-    You should have received a copy of the GNU Lesser General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
-
 package guide;
 
 import java.util.Formatter;
@@ -31,33 +12,39 @@ import org.zeromq.ZMsg;
 * http://rfc.zeromq.org/spec:7.
 *
 */
-public class mdcliapi {
+public class mdcliapi
+{
 
-    private String broker;
-    private ZContext ctx;
+    private String     broker;
+    private ZContext   ctx;
     private ZMQ.Socket client;
-    private long timeout = 2500;
-    private int retries = 3;
-    private boolean verbose;
-    private Formatter log = new Formatter(System.out);
+    private long       timeout = 2500;
+    private int        retries = 3;
+    private boolean    verbose;
+    private Formatter  log     = new Formatter(System.out);
 
-    public long getTimeout() {
+    public long getTimeout()
+    {
         return timeout;
     }
 
-    public void setTimeout(long timeout) {
+    public void setTimeout(long timeout)
+    {
         this.timeout = timeout;
     }
 
-    public int getRetries() {
+    public int getRetries()
+    {
         return retries;
     }
 
-    public void setRetries(int retries) {
+    public void setRetries(int retries)
+    {
         this.retries = retries;
     }
 
-    public mdcliapi(String broker, boolean verbose) {
+    public mdcliapi(String broker, boolean verbose)
+    {
         this.broker = broker;
         this.verbose = verbose;
         ctx = new ZContext();
@@ -67,7 +54,8 @@ public class mdcliapi {
     /**
      * Connect or reconnect to broker
      */
-    void reconnectToBroker() {
+    void reconnectToBroker()
+    {
         if (client != null) {
             ctx.destroySocket(client);
         }
@@ -86,7 +74,8 @@ public class mdcliapi {
      * @param request
      * @return
      */
-    public ZMsg send(String service, ZMsg request) {
+    public ZMsg send(String service, ZMsg request)
+    {
 
         request.push(new ZFrame(service));
         request.push(MDP.C_CLIENT.newFrame());
@@ -102,14 +91,14 @@ public class mdcliapi {
             request.duplicate().send(client);
 
             // Poll socket for a reply, with timeout
-            ZMQ.Poller items = new ZMQ.Poller(1);
+            ZMQ.Poller items = ctx.createPoller(1);
             items.register(client, ZMQ.Poller.POLLIN);
             if (items.poll(timeout) == -1)
                 break; // Interrupted
 
             if (items.pollin(0)) {
                 ZMsg msg = ZMsg.recvMsg(client);
-                if (verbose){
+                if (verbose) {
                     log.format("I: received reply: \n");
                     msg.dump(log.out());
                 }
@@ -126,7 +115,8 @@ public class mdcliapi {
 
                 reply = msg;
                 break;
-            } else {
+            }
+            else {
                 items.unregister(client);
                 if (--retriesLeft == 0) {
                     log.format("W: permanent error, abandoning\n");
@@ -140,7 +130,8 @@ public class mdcliapi {
         return reply;
     }
 
-    public void destroy() {
+    public void destroy()
+    {
         ctx.destroy();
     }
 }

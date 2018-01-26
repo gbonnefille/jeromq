@@ -1,22 +1,3 @@
-/*
-    Copyright (c) 2007-2014 Contributors as noted in the AUTHORS file
-
-    This file is part of 0MQ.
-
-    0MQ is free software; you can redistribute it and/or modify it under
-    the terms of the GNU Lesser General Public License as published by
-    the Free Software Foundation; either version 3 of the License, or
-    (at your option) any later version.
-
-    0MQ is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU Lesser General Public License for more details.
-
-    You should have received a copy of the GNU Lesser General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
-
 package perf;
 
 import zmq.Ctx;
@@ -43,13 +24,12 @@ public class LocalLat
         Msg msg;
 
         if (args.length != 3) {
-            printf("usage: local_lat <bind-to> <message-size> "
-               + "<roundtrip-count>\n");
+            printf("usage: local_lat <bind-to> <message-size> " + "<roundtrip-count>\n");
             return;
         }
-        bindTo = args [0];
-        messageSize = atoi(args [1]);
-        roundtripCount = atoi(args [2]);
+        bindTo = args[0];
+        messageSize = atoi(args[1]);
+        roundtripCount = atoi(args[2]);
 
         ctx = ZMQ.init(1);
         if (ctx == null) {
@@ -103,7 +83,7 @@ public class LocalLat
         System.out.println(string);
     }
 
-    private static void printf(String string, Object ... args)
+    private static void printf(String string, Object... args)
     {
         System.out.println(String.format(string, args));
     }

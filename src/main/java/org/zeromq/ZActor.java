@@ -1,22 +1,3 @@
-/*
-    Copyright (c) 2007-2014 Contributors as noted in the AUTHORS file
-
-    This file is part of 0MQ.
-
-    0MQ is free software; you can redistribute it and/or modify it under
-    the terms of the GNU Lesser General Public License as published by
-    the Free Software Foundation; either version 3 of the License, or
-    (at your option) any later version.
-
-    0MQ is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU Lesser General Public License for more details.
-
-    You should have received a copy of the GNU Lesser General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
- */
-
 package org.zeromq;
 
 import java.nio.channels.SelectableChannel;
@@ -230,11 +211,12 @@ public class ZActor extends ZStar
          * Called when the current double has been destroyed.
          * Last in the order call of the double.
          *
-         * @param pipe   the backstage control pipe
+         * @param ctx    the context.
+         * @param pipe   the backstage control pipe.
          * @param poller the poller of the double.
          * @return <b>true to restart a new double</b>, false to stop the acting process
          */
-        boolean destroyed(Socket pipe, ZPoller poller);
+        boolean destroyed(ZContext ctx, Socket pipe, ZPoller poller);
 
         /**
          * Called when the stage is finished.
@@ -261,15 +243,13 @@ public class ZActor extends ZStar
         }
 
         @Override
-        public List<Socket> createSockets(final ZContext ctx,
-                final Object[] args)
+        public List<Socket> createSockets(final ZContext ctx, final Object[] args)
         {
             return Collections.emptyList();
         }
 
         @Override
-        public void start(final Socket pipe, final List<Socket> sockets,
-                final ZPoller poller)
+        public void start(final Socket pipe, final List<Socket> sockets, final ZPoller poller)
         {
             // do nothing
         }
@@ -282,16 +262,14 @@ public class ZActor extends ZStar
         }
 
         @Override
-        public boolean backstage(final Socket pipe, final ZPoller poller,
-                final int events)
+        public boolean backstage(final Socket pipe, final ZPoller poller, final int events)
         {
             // stop looping
             return false;
         }
 
         @Override
-        public boolean stage(final Socket socket, final Socket pipe,
-                final ZPoller poller, int events)
+        public boolean stage(final Socket socket, final Socket pipe, final ZPoller poller, int events)
         {
             // stop looping
             return false;
@@ -311,7 +289,7 @@ public class ZActor extends ZStar
         }
 
         @Override
-        public boolean destroyed(final Socket pipe, ZPoller poller)
+        public boolean destroyed(final ZContext ctx, final Socket pipe, final ZPoller poller)
         {
             // no restart
             return false;
@@ -354,16 +332,14 @@ public class ZActor extends ZStar
         }
 
         @Override
-        public List<Socket> createSockets(final ZContext ctx,
-                final Object[] args)
+        public List<Socket> createSockets(final ZContext ctx, final Object[] args)
         {
             shadow.createSockets(ctx, args);
             return main.createSockets(ctx, args);
         }
 
         @Override
-        public void start(final Socket pipe, final List<Socket> sockets,
-                final ZPoller poller)
+        public void start(final Socket pipe, final List<Socket> sockets, final ZPoller poller)
         {
             shadow.start(pipe, sockets, poller);
             main.start(pipe, sockets, poller);
@@ -377,16 +353,14 @@ public class ZActor extends ZStar
         }
 
         @Override
-        public boolean backstage(final Socket pipe, final ZPoller poller,
-                final int events)
+        public boolean backstage(final Socket pipe, final ZPoller poller, final int events)
         {
             shadow.backstage(pipe, poller, events);
             return main.backstage(pipe, poller, events);
         }
 
         @Override
-        public boolean stage(final Socket socket, final Socket pipe,
-                final ZPoller poller, final int events)
+        public boolean stage(final Socket socket, final Socket pipe, final ZPoller poller, final int events)
         {
             shadow.stage(socket, pipe, poller, events);
             return main.stage(socket, pipe, poller, events);
@@ -407,10 +381,10 @@ public class ZActor extends ZStar
         }
 
         @Override
-        public boolean destroyed(final Socket pipe, final ZPoller poller)
+        public boolean destroyed(final ZContext ctx, final Socket pipe, final ZPoller poller)
         {
-            shadow.destroyed(pipe, poller);
-            return main.destroyed(pipe, poller);
+            shadow.destroyed(ctx, pipe, poller);
+            return main.destroyed(ctx, pipe, poller);
         }
 
         @Override
@@ -464,8 +438,8 @@ public class ZActor extends ZStar
      * @param args
      *            the optional arguments that will be passed to the distant actor
      */
-    public ZActor(final ZContext context, final SelectorCreator selector,
-            final Actor actor, final String motdelafin, final Object[] args)
+    public ZActor(final ZContext context, final SelectorCreator selector, final Actor actor, final String motdelafin,
+            final Object[] args)
     {
         super(context, selector, new ActorFortune(actor), motdelafin, args);
     }
@@ -488,8 +462,7 @@ public class ZActor extends ZStar
         }
 
         @Override
-        public Star create(ZContext ctx, Socket pipe, Selector sel,
-                int count, Star previous, Object[] args)
+        public Star create(ZContext ctx, Socket pipe, Selector sel, int count, Star previous, Object[] args)
         {
             Star star = new ZActor.Double(ctx, pipe, sel, actor, args);
             return star;
@@ -522,11 +495,14 @@ public class ZActor extends ZStar
         // actor responsible for processing messages
         private final Actor actor;
 
+        // context used for the closing of the sockets
+        private final ZContext context;
+
         // creates a new double
-        public Double(final ZContext ctx, final Socket pipe,
-                final Selector selector, final Actor actor,
+        public Double(final ZContext ctx, final Socket pipe, final Selector selector, final Actor actor,
                 final Object[] args)
         {
+            this.context = ctx;
             this.pipe = pipe;
             this.actor = actor;
 
@@ -582,13 +558,13 @@ public class ZActor extends ZStar
                 iter.remove();
                 if (socket != null) {
                     poller.unregister(socket);
-                    socket.close();
+                    context.destroySocket(socket);
                     // call back the actor to inform that a socket has been closed.
                     actor.closed(socket);
                 }
             }
             // let the actor decide if the stage restarts a new double
-            return actor.destroyed(pipe, poller);
+            return actor.destroyed(context, pipe, poller);
         }
 
         @Override

@@ -1,23 +1,6 @@
-/*
-    Copyright (c) 2007-2014 Contributors as noted in the AUTHORS file
-
-    This file is part of 0MQ.
-
-    0MQ is free software; you can redistribute it and/or modify it under
-    the terms of the GNU Lesser General Public License as published by
-    the Free Software Foundation; either version 3 of the License, or
-    (at your option) any later version.
-
-    0MQ is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU Lesser General Public License for more details.
-
-    You should have received a copy of the GNU Lesser General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
-
 package guide;
+
+import java.util.Random;
 
 import org.zeromq.ZContext;
 import org.zeromq.ZFrame;
@@ -25,8 +8,6 @@ import org.zeromq.ZMQ;
 import org.zeromq.ZMQ.Socket;
 import org.zeromq.ZThread;
 import org.zeromq.ZThread.IAttachedRunnable;
-
-import java.util.Random;
 
 //  Espresso Pattern
 //  This shows how to capture data using a pub-sub proxy
@@ -50,7 +31,7 @@ public class espresso
             while (count < 5) {
                 String string = subscriber.recvStr();
                 if (string == null)
-                    break;              //  Interrupted
+                    break; //  Interrupted
                 count++;
             }
             ctx.destroySocket(subscriber);
@@ -71,10 +52,11 @@ public class espresso
             while (!Thread.currentThread().isInterrupted()) {
                 String string = String.format("%c-%05d", 'A' + rand.nextInt(10), rand.nextInt(100000));
                 if (!publisher.send(string))
-                    break;              //  Interrupted
+                    break; //  Interrupted
                 try {
-                    Thread.sleep(100);     //  Wait for 1/10th second
-                } catch (InterruptedException e) {
+                    Thread.sleep(100); //  Wait for 1/10th second
+                }
+                catch (InterruptedException e) {
                 }
             }
             ctx.destroySocket(publisher);
@@ -94,7 +76,7 @@ public class espresso
             while (true) {
                 ZFrame frame = ZFrame.recvFrame(pipe);
                 if (frame == null)
-                    break;              //  Interrupted
+                    break; //  Interrupted
                 frame.print(null);
                 frame.destroy();
             }
@@ -116,7 +98,7 @@ public class espresso
         Socket publisher = ctx.createSocket(ZMQ.XPUB);
         publisher.bind("tcp://*:6001");
         Socket listener = ZThread.fork(ctx, new Listener());
-        ZMQ.proxy (subscriber, publisher, listener);
+        ZMQ.proxy(subscriber, publisher, listener);
 
         System.out.println(" interrupted");
         //  Tell attached threads to exit

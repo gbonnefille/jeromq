@@ -1,36 +1,18 @@
-/*
-    Copyright (c) 2007-2014 Contributors as noted in the AUTHORS file
-
-    This file is part of 0MQ.
-
-    0MQ is free software; you can redistribute it and/or modify it under
-    the terms of the GNU Lesser General Public License as published by
-    the Free Software Foundation; either version 3 of the License, or
-    (at your option) any later version.
-
-    0MQ is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU Lesser General Public License for more details.
-
-    You should have received a copy of the GNU Lesser General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
-
 package guide;
 
-import org.zeromq.ZContext;
-import org.zeromq.ZMQ;
-import org.zeromq.ZMQ.PollItem;
-import org.zeromq.ZMQ.Socket;
-import org.zeromq.ZMsg;
-import org.zeromq.ZThread;
-import org.zeromq.ZThread.IAttachedRunnable;
-
+import java.nio.channels.Selector;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import org.zeromq.ZContext;
+import org.zeromq.ZMQ;
+import org.zeromq.ZMQ.Poller;
+import org.zeromq.ZMQ.Socket;
+import org.zeromq.ZMsg;
+import org.zeromq.ZThread;
+import org.zeromq.ZThread.IAttachedRunnable;
 
 //  flcliapi class - Freelance Pattern agent class
 //  Implements the Freelance Protocol at http://rfc.zeromq.org/spec:10
@@ -39,9 +21,9 @@ public class flcliapi
     //  If not a single service replies within this time, give up
     private static final int GLOBAL_TIMEOUT = 2500;
     //  PING interval for servers we think are alive
-    private static final int PING_INTERVAL = 2000;    //  msecs
+    private static final int PING_INTERVAL = 2000; //  msecs
     //  Server considered dead if silent for this long
-    private static final int SERVER_TTL = 6000;    //  msecs
+    private static final int SERVER_TTL = 6000; //  msecs
 
     //  .split API structure
     //  This API works in two halves, a common pattern for APIs that need to
@@ -51,8 +33,8 @@ public class flcliapi
     //  inproc pipe socket:
 
     //  Structure of our frontend class
-    private ZContext ctx;        //  Our context wrapper
-    private Socket pipe;         //  Pipe through to flcliapi agent
+    private ZContext ctx;  //  Our context wrapper
+    private Socket   pipe; //  Pipe through to flcliapi agent
 
     public flcliapi()
     {
@@ -80,8 +62,9 @@ public class flcliapi
 
         msg.send(pipe);
         try {
-            Thread.sleep(100);   //  Allow connection to come up
-        } catch (InterruptedException e) {
+            Thread.sleep(100); //  Allow connection to come up
+        }
+        catch (InterruptedException e) {
         }
     }
 
@@ -101,7 +84,6 @@ public class flcliapi
         return reply;
     }
 
-
     //  .split backend agent
     //  Here we see the backend agent. It runs as an attached thread, talking
     //  to its parent over a pipe socket. It is a fairly complex piece of work
@@ -111,10 +93,10 @@ public class flcliapi
     //  Simple class for one server we talk to
     private static class Server
     {
-        private String endpoint;        //  Server identity/endpoint
-        private boolean alive;          //  1 if known to be alive
-        private long pingAt;            //  Next ping at this time
-        private long expires;           //  Expires at this time
+        private String  endpoint; //  Server identity/endpoint
+        private boolean alive;    //  1 if known to be alive
+        private long    pingAt;   //  Next ping at this time
+        private long    expires;  //  Expires at this time
 
         protected Server(String endpoint)
         {
@@ -123,6 +105,7 @@ public class flcliapi
             pingAt = System.currentTimeMillis() + PING_INTERVAL;
             expires = System.currentTimeMillis() + SERVER_TTL;
         }
+
         protected void destroy()
         {
         }
@@ -153,15 +136,15 @@ public class flcliapi
     //  Simple class for one background agent
     private static class Agent
     {
-        private ZContext ctx;               //  Own context
-        private Socket pipe;                //  Socket to talk back to application
-        private Socket router;              //  Socket to talk to servers
-        private Map<String, Server> servers;     //  Servers we've connected to
-        private List<Server> actives;       //  Servers we know are alive
-        private int sequence;               //  Number of requests ever sent
-        private ZMsg request;               //  Current request if any
-        private ZMsg reply;                 //  Current reply if any
-        private long expires;               //  Timeout for request/reply
+        private ZContext            ctx;      //  Own context
+        private Socket              pipe;     //  Socket to talk back to application
+        private Socket              router;   //  Socket to talk to servers
+        private Map<String, Server> servers;  //  Servers we've connected to
+        private List<Server>        actives;  //  Servers we know are alive
+        private int                 sequence; //  Number of requests ever sent
+        private ZMsg                request;  //  Current request if any
+        private ZMsg                reply;    //  Current reply if any
+        private long                expires;  //  Timeout for request/reply
 
         protected Agent(ZContext ctx, Socket pipe)
         {
@@ -174,7 +157,7 @@ public class flcliapi
 
         protected void destroy()
         {
-            for(Server server: servers.values())
+            for (Server server : servers.values())
                 server.destroy();
         }
 
@@ -198,9 +181,8 @@ public class flcliapi
                 server.pingAt = System.currentTimeMillis() + PING_INTERVAL;
                 server.expires = System.currentTimeMillis() + SERVER_TTL;
             }
-            else
-            if (command.equals("REQUEST")) {
-                assert (request == null);    //  Strict request-reply cycle
+            else if (command.equals("REQUEST")) {
+                assert (request == null); //  Strict request-reply cycle
                 //  Prefix request with getSequence number and empty envelope
                 String sequenceText = String.format("%d", ++sequence);
                 msg.push(sequenceText);
@@ -240,12 +222,12 @@ public class flcliapi
                 request.destroy();
                 request = null;
             }
-            else
-                reply.destroy();
+            else reply.destroy();
 
         }
 
     }
+
     //  .split backend agent implementation
     //  Finally, here's the agent task itself, which polls its two sockets
     //  and processes incoming messages:
@@ -256,33 +238,32 @@ public class flcliapi
         public void run(Object[] args, ZContext ctx, Socket pipe)
         {
             Agent agent = new Agent(ctx, pipe);
+            Selector selector = ctx.createSelector();
 
-            PollItem[] items = {
-                    new PollItem(agent.pipe, ZMQ.Poller.POLLIN),
-                    new PollItem(agent.router, ZMQ.Poller.POLLIN)
-            };
+            Poller poller = ctx.createPoller(2);
+            poller.register(agent.pipe, Poller.POLLIN);
+            poller.register(agent.router, Poller.POLLIN);
+
             while (!Thread.currentThread().isInterrupted()) {
                 //  Calculate tickless timer, up to 1 hour
                 long tickless = System.currentTimeMillis() + 1000 * 3600;
-                if (agent.request != null
-                        &&  tickless > agent.expires)
+                if (agent.request != null && tickless > agent.expires)
                     tickless = agent.expires;
 
-                for (Server server: agent.servers.values()) {
+                for (Server server : agent.servers.values()) {
                     long newTickless = server.tickless(tickless);
                     if (newTickless > 0)
                         tickless = newTickless;
                 }
 
-                int rc = ZMQ.poll(items,
-                        (tickless - System.currentTimeMillis()));
+                int rc = poller.poll(tickless - System.currentTimeMillis());
                 if (rc == -1)
-                    break;              //  Context has been shut down
+                    break; //  Context has been shut down
 
-                if (items[0].isReadable())
+                if (poller.pollin(0))
                     agent.controlMessage();
 
-                if (items[1].isReadable())
+                if (poller.pollin(1))
                     agent.routerMessage();
 
                 //  If we're processing a request, dispatch to next server
@@ -313,7 +294,7 @@ public class flcliapi
 
                 //  Disconnect and delete any expired servers
                 //  Send heartbeats to idle servers if needed
-                for (Server server: agent.servers.values())
+                for (Server server : agent.servers.values())
                     server.ping(agent.router);
             }
             agent.destroy();

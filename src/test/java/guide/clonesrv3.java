@@ -1,22 +1,3 @@
-/*
-    Copyright (c) 2007-2014 Contributors as noted in the AUTHORS file
-
-    This file is part of 0MQ.
-
-    0MQ is free software; you can redistribute it and/or modify it under
-    the terms of the GNU Lesser General Public License as published by
-    the Free Software Foundation; either version 3 of the License, or
-    (at your option) any later version.
-
-    0MQ is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU Lesser General Public License for more details.
-
-    You should have received a copy of the GNU Lesser General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
-
 package guide;
 
 import java.util.Iterator;
@@ -34,10 +15,12 @@ import org.zeromq.ZMQ.Socket;
  * @author Danish Shrestha <dshrestha06@gmail.com>
  *
  */
-public class clonesrv3 {
+public class clonesrv3
+{
     private static Map<String, kvsimple> kvMap = new LinkedHashMap<String, kvsimple>();
 
-    public void run() {
+    public void run()
+    {
 
         ZContext ctx = new ZContext();
 
@@ -50,19 +33,19 @@ public class clonesrv3 {
         Socket collector = ctx.createSocket(ZMQ.PULL);
         collector.bind("tcp://*:5558");
 
-        Poller poller = new Poller(2);
+        Poller poller = ctx.createPoller(2);
         poller.register(collector, Poller.POLLIN);
         poller.register(snapshot, Poller.POLLIN);
 
         long sequence = 0;
         while (!Thread.currentThread().isInterrupted()) {
             if (poller.poll(1000) < 0)
-                break;              //  Context has been shut down
+                break; //  Context has been shut down
 
             // apply state updates from main thread
             if (poller.pollin(0)) {
                 kvsimple kvMsg = kvsimple.recv(collector);
-                if (kvMsg == null)  //  Interrupted
+                if (kvMsg == null) //  Interrupted
                     break;
                 kvMsg.setSequence(++sequence);
                 kvMsg.send(publisher);
@@ -74,7 +57,7 @@ public class clonesrv3 {
             if (poller.pollin(1)) {
                 byte[] identity = snapshot.recv(0);
                 if (identity == null)
-                    break;      //  Interrupted
+                    break; //  Interrupted
                 String request = snapshot.recvStr();
 
                 if (!request.equals("ICANHAZ?")) {
@@ -97,16 +80,18 @@ public class clonesrv3 {
                 message.send(snapshot);
             }
         }
-        System.out.printf (" Interrupted\n%d messages handled\n", sequence);
-        ctx.destroy();
+        System.out.printf(" Interrupted\n%d messages handled\n", sequence);
+        ctx.close();
     }
 
-    private void sendMessage(kvsimple msg, byte[] identity, Socket snapshot) {
+    private void sendMessage(kvsimple msg, byte[] identity, Socket snapshot)
+    {
         snapshot.send(identity, ZMQ.SNDMORE);
         msg.send(snapshot);
     }
 
-	public static void main(String[] args) {
-		new clonesrv3().run();
-	}
+    public static void main(String[] args)
+    {
+        new clonesrv3().run();
+    }
 }

@@ -1,23 +1,10 @@
-/*
-    Copyright (c) 2007-2014 Contributors as noted in the AUTHORS file
-
-    This file is part of 0MQ.
-
-    0MQ is free software; you can redistribute it and/or modify it under
-    the terms of the GNU Lesser General Public License as published by
-    the Free Software Foundation; either version 3 of the License, or
-    (at your option) any later version.
-
-    0MQ is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU Lesser General Public License for more details.
-
-    You should have received a copy of the GNU Lesser General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
-
 package zmq;
+
+import zmq.io.IEngine;
+import zmq.io.IOThread;
+import zmq.io.SessionBase;
+import zmq.pipe.Pipe;
+import zmq.pipe.YPipeBase;
 
 //  Base class for all objects that participate in inter-thread
 //  communication.
@@ -27,7 +14,7 @@ public abstract class ZObject
     private final Ctx ctx;
 
     //  Thread ID of the thread the object belongs to.
-    private final int tid;
+    private int tid;
 
     protected ZObject(Ctx ctx, int tid)
     {
@@ -40,19 +27,26 @@ public abstract class ZObject
         this(parent.ctx, parent.tid);
     }
 
-    protected int getTid()
+    public final int getTid()
     {
         return tid;
     }
 
-    protected Ctx getCtx()
+    protected final void setTid(int tid)
+    {
+        this.tid = tid;
+    }
+
+    protected final Ctx getCtx()
     {
         return ctx;
     }
 
-    protected void processCommand(Command cmd)
+    @SuppressWarnings("unchecked")
+    final void processCommand(Command cmd)
     {
-        switch (cmd.type()) {
+        //        System.out.println(Thread.currentThread().getName() + ": Processing command " + cmd);
+        switch (cmd.type) {
         case ACTIVATE_READ:
             processActivateRead();
             break;
@@ -86,7 +80,7 @@ public abstract class ZObject
             break;
 
         case HICCUP:
-            processHiccup(cmd.arg);
+            processHiccup((YPipeBase<Msg>) cmd.arg);
             break;
 
         case PIPE_TERM:
@@ -117,38 +111,58 @@ public abstract class ZObject
             processReaped();
             break;
 
+        case INPROC_CONNECTED:
+            processSeqnum();
+            break;
+
+        case DONE:
         default:
             throw new IllegalArgumentException();
         }
     }
 
-    protected boolean registerEndpoint(String addr, Ctx.Endpoint endpoint)
+    protected final boolean registerEndpoint(String addr, Ctx.Endpoint endpoint)
     {
         return ctx.registerEndpoint(addr, endpoint);
     }
 
-    protected void unregisterEndpoints(SocketBase socket)
+    protected final boolean unregisterEndpoint(String addr, SocketBase socket)
+    {
+        return ctx.unregisterEndpoint(addr, socket);
+    }
+
+    protected final void unregisterEndpoints(SocketBase socket)
     {
         ctx.unregisterEndpoints(socket);
     }
 
-    protected Ctx.Endpoint findEndpoint(String addr)
+    protected final Ctx.Endpoint findEndpoint(String addr)
     {
         return ctx.findEndpoint(addr);
     }
 
-    protected void destroySocket(SocketBase socket)
+    protected final void pendConnection(String addr, Ctx.Endpoint endpoint, Pipe[] pipes)
+    {
+        ctx.pendConnection(addr, endpoint, pipes);
+    }
+
+    protected final void connectPending(String addr, SocketBase bindSocket)
+    {
+        ctx.connectPending(addr, bindSocket);
+    }
+
+    protected final void destroySocket(SocketBase socket)
     {
         ctx.destroySocket(socket);
     }
 
     //  Chooses least loaded I/O thread.
-    protected IOThread chooseIoThread(long affinity)
+    protected final IOThread chooseIoThread(long affinity)
     {
         return ctx.chooseIoThread(affinity);
     }
 
-    protected void sendStop()
+    protected final void sendStop()
     {
         //  'stop' command goes always from administrative thread to
         //  the current object.
@@ -156,12 +170,12 @@ public abstract class ZObject
         ctx.sendCommand(tid, cmd);
     }
 
-    protected void sendPlug(Own destination)
+    protected final void sendPlug(Own destination)
     {
         sendPlug(destination, true);
     }
 
-    protected void sendPlug(Own destination, boolean incSeqnum)
+    protected final void sendPlug(Own destination, boolean incSeqnum)
     {
         if (incSeqnum) {
             destination.incSeqnum();
@@ -171,19 +185,19 @@ public abstract class ZObject
         sendCommand(cmd);
     }
 
-    protected void sendOwn(Own destination, Own object)
+    protected final void sendOwn(Own destination, Own object)
     {
         destination.incSeqnum();
         Command cmd = new Command(destination, Command.Type.OWN, object);
         sendCommand(cmd);
     }
 
-    protected void sendAttach(SessionBase destination, IEngine engine)
+    protected final void sendAttach(SessionBase destination, IEngine engine)
     {
         sendAttach(destination, engine, true);
     }
 
-    protected void sendAttach(SessionBase destination, IEngine engine, boolean incSeqnum)
+    protected final void sendAttach(SessionBase destination, IEngine engine, boolean incSeqnum)
     {
         if (incSeqnum) {
             destination.incSeqnum();
@@ -193,12 +207,12 @@ public abstract class ZObject
         sendCommand(cmd);
     }
 
-    protected void sendBind(Own destination, Pipe pipe)
+    protected final void sendBind(Own destination, Pipe pipe)
     {
         sendBind(destination, pipe, true);
     }
 
-    protected void sendBind(Own destination, Pipe pipe, boolean incSeqnum)
+    protected final void sendBind(Own destination, Pipe pipe, boolean incSeqnum)
     {
         if (incSeqnum) {
             destination.incSeqnum();
@@ -208,67 +222,73 @@ public abstract class ZObject
         sendCommand(cmd);
     }
 
-    protected void sendActivateRead(Pipe destination)
+    protected final void sendActivateRead(Pipe destination)
     {
         Command cmd = new Command(destination, Command.Type.ACTIVATE_READ);
         sendCommand(cmd);
     }
 
-    protected void sendActivateWrite(Pipe destination, long msgsRead)
+    protected final void sendActivateWrite(Pipe destination, long msgsRead)
     {
         Command cmd = new Command(destination, Command.Type.ACTIVATE_WRITE, msgsRead);
         sendCommand(cmd);
     }
 
-    protected void sendHiccup(Pipe destination, Object pipe)
+    protected final void sendHiccup(Pipe destination, YPipeBase<Msg> pipe)
     {
         Command cmd = new Command(destination, Command.Type.HICCUP, pipe);
         sendCommand(cmd);
     }
 
-    protected void sendPipeTerm(Pipe destination)
+    protected final void sendPipeTerm(Pipe destination)
     {
         Command cmd = new Command(destination, Command.Type.PIPE_TERM);
         sendCommand(cmd);
     }
 
-    protected void sendPipeTermAck(Pipe destination)
+    protected final void sendPipeTermAck(Pipe destination)
     {
         Command cmd = new Command(destination, Command.Type.PIPE_TERM_ACK);
         sendCommand(cmd);
     }
 
-    protected void sendTermReq(Own destination, Own object)
+    protected final void sendTermReq(Own destination, Own object)
     {
         Command cmd = new Command(destination, Command.Type.TERM_REQ, object);
         sendCommand(cmd);
     }
 
-    protected void sendTerm(Own destination, int linger)
+    protected final void sendTerm(Own destination, int linger)
     {
         Command cmd = new Command(destination, Command.Type.TERM, linger);
         sendCommand(cmd);
     }
 
-    protected void sendTermAck(Own destination)
+    protected final void sendTermAck(Own destination)
     {
         Command cmd = new Command(destination, Command.Type.TERM_ACK);
         sendCommand(cmd);
     }
 
-    protected void sendReap(SocketBase socket)
+    protected final void sendReap(SocketBase socket)
     {
         Command cmd = new Command(ctx.getReaper(), Command.Type.REAP, socket);
         sendCommand(cmd);
     }
 
-    protected void sendReaped()
+    protected final void sendReaped()
     {
         Command cmd = new Command(ctx.getReaper(), Command.Type.REAPED);
         sendCommand(cmd);
     }
 
-    protected void sendDone()
+    protected final void sendInprocConnected(SocketBase socket)
+    {
+        Command cmd = new Command(socket, Command.Type.INPROC_CONNECTED);
+        sendCommand(cmd);
+    }
+
+    protected final void sendDone()
     {
         Command cmd = new Command(null, Command.Type.DONE);
         ctx.sendCommand(Ctx.TERM_TID, cmd);
@@ -309,7 +329,7 @@ public abstract class ZObject
         throw new UnsupportedOperationException();
     }
 
-    protected void processHiccup(Object hiccupPipe)
+    protected void processHiccup(YPipeBase<Msg> hiccupPipe)
     {
         throw new UnsupportedOperationException();
     }
@@ -359,6 +379,6 @@ public abstract class ZObject
 
     private void sendCommand(Command cmd)
     {
-        ctx.sendCommand(cmd.destination().getTid(), cmd);
+        ctx.sendCommand(cmd.destination.getTid(), cmd);
     }
 }

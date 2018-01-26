@@ -1,32 +1,15 @@
-/*
-    Copyright (c) 2007-2014 Contributors as noted in the AUTHORS file
-
-    This file is part of 0MQ.
-
-    0MQ is free software; you can redistribute it and/or modify it under
-    the terms of the GNU Lesser General Public License as published by
-    the Free Software Foundation; either version 3 of the License, or
-    (at your option) any later version.
-
-    0MQ is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU Lesser General Public License for more details.
-
-    You should have received a copy of the GNU Lesser General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
-
 package zmq;
 
 //  This structure defines the commands that can be sent between threads.
-class Command
+public class Command
 {
     //  Object to process the command.
-    private final ZObject destination;
-    private final Type type;
+    final ZObject destination;
+    final Type    type;
+    final Object  arg;
 
-    public enum Type {
+    public enum Type
+    {
         //  Sent to I/O thread to let it know that it should
         //  terminate itself.
         STOP,
@@ -68,38 +51,34 @@ class Command
         REAP,
         //  Closed socket notifies the reaper that it's already deallocated.
         REAPED,
+        // TODO V4 provide a description for Command#INPROC_CONNECTED
+        INPROC_CONNECTED,
         //  Sent by reaper thread to the term thread when all the sockets
         //  are successfully deallocated.
         DONE
     }
 
-    Object arg;
-
-    public Command(ZObject destination, Type type)
+    Command(ZObject destination, Type type)
     {
         this(destination, type, null);
     }
 
-    public Command(ZObject destination, Type type, Object arg)
+    Command(ZObject destination, Type type, Object arg)
     {
         this.destination = destination;
         this.type = type;
         this.arg = arg;
     }
 
-    public ZObject destination()
+    public final void process()
     {
-        return destination;
-    }
-
-    public Type type()
-    {
-        return type;
+        destination.processCommand(this);
     }
 
     @Override
     public String toString()
     {
-        return super.toString() + "[" + type + ", " + destination + "]";
+        return "Cmd" + "[" + destination + ", " + (destination == null ? "Reaper" : destination.getTid() + ", ") + type
+                + (arg == null ? "" : ", " + arg) + "]";
     }
 }

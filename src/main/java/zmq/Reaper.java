@@ -1,59 +1,43 @@
-/*
-    Copyright (c) 2007-2014 Contributors as noted in the AUTHORS file
-
-    This file is part of 0MQ.
-
-    0MQ is free software; you can redistribute it and/or modify it under
-    the terms of the GNU Lesser General Public License as published by
-    the Free Software Foundation; either version 3 of the License, or
-    (at your option) any later version.
-
-    0MQ is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU Lesser General Public License for more details.
-
-    You should have received a copy of the GNU Lesser General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
-
 package zmq;
 
 import java.io.Closeable;
 import java.io.IOException;
 import java.nio.channels.SelectableChannel;
+import java.util.concurrent.atomic.AtomicBoolean;
 
-public class Reaper extends ZObject implements IPollEvents, Closeable
+import zmq.poll.IPollEvents;
+import zmq.poll.Poller;
+
+final class Reaper extends ZObject implements IPollEvents, Closeable
 {
     //  Reaper thread accesses incoming commands via this mailbox.
     private final Mailbox mailbox;
 
     //  Handle associated with mailbox' file descriptor.
-    private SelectableChannel mailboxHandle;
+    private final Poller.Handle mailboxHandle;
 
     //  I/O multiplexing is performed using a poller object.
     private final Poller poller;
 
     //  Number of sockets being reaped at the moment.
-    private int sockets;
+    private int socketsReaping;
 
     //  If true, we were already asked to terminate.
-    private volatile boolean terminating;
+    private final AtomicBoolean terminating = new AtomicBoolean();
 
-    private String name;
+    private final String name;
 
-    public Reaper(Ctx ctx, int tid)
+    Reaper(Ctx ctx, int tid)
     {
         super(ctx, tid);
-        sockets = 0;
-        terminating = false;
+        socketsReaping = 0;
         name = "reaper-" + tid;
-        poller = new Poller(name);
+        poller = new Poller(ctx, name);
 
-        mailbox = new Mailbox(name);
+        mailbox = new Mailbox(ctx, name, tid);
 
-        mailboxHandle = mailbox.getFd();
-        poller.addHandle(mailboxHandle, this);
+        SelectableChannel fd = mailbox.getFd();
+        mailboxHandle = poller.addHandle(fd, this);
         poller.setPollIn(mailboxHandle);
     }
 
@@ -64,19 +48,19 @@ public class Reaper extends ZObject implements IPollEvents, Closeable
         mailbox.close();
     }
 
-    public Mailbox getMailbox()
+    Mailbox getMailbox()
     {
         return mailbox;
     }
 
-    public void start()
+    void start()
     {
         poller.start();
     }
 
-    public void stop()
+    void stop()
     {
-        if (!terminating) {
+        if (!terminating.get()) {
             sendStop();
         }
     }
@@ -92,7 +76,7 @@ public class Reaper extends ZObject implements IPollEvents, Closeable
             }
 
             //  Process the command.
-            cmd.destination().processCommand(cmd);
+            cmd.process();
         }
     }
 
@@ -123,36 +107,39 @@ public class Reaper extends ZObject implements IPollEvents, Closeable
     @Override
     protected void processStop()
     {
-        terminating = true;
+        terminating.set(true);
 
         //  If there are no sockets being reaped finish immediately.
-        if (sockets == 0) {
-            sendDone();
-            poller.removeHandle(mailboxHandle);
-            poller.stop();
+        if (socketsReaping == 0) {
+            finishTerminating();
         }
     }
 
     @Override
     protected void processReap(SocketBase socket)
     {
+        ++socketsReaping;
+
         //  Add the socket to the poller.
         socket.startReaping(poller);
-
-        ++sockets;
     }
 
     @Override
     protected void processReaped()
     {
-        --sockets;
+        --socketsReaping;
 
         //  If reaped was already asked to terminate and there are no more sockets,
         //  finish immediately.
-        if (sockets == 0 && terminating) {
-            sendDone();
-            poller.removeHandle(mailboxHandle);
-            poller.stop();
+        if (socketsReaping == 0 && terminating.get()) {
+            finishTerminating();
         }
+    }
+
+    private void finishTerminating()
+    {
+        sendDone();
+        poller.removeHandle(mailboxHandle);
+        poller.stop();
     }
 }
